@@ -1,16 +1,16 @@
 package main
 
 import (
+	"code.google.com/p/go.net/websocket"
 	"crypto/hmac"
 	"crypto/sha1"
-	"code.google.com/p/go.net/websocket"
 	"encoding/json"
 	"fmt"
+	zmq "github.com/alecthomas/gozmq"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	zmq "github.com/alecthomas/gozmq"
 )
 
 var PUB_KEY = "gobot"
@@ -112,8 +112,8 @@ func BuildConnection(ws *websocket.Conn) {
 
 	// make sure we're within a 60 second window
 	current_time := time.Now()
-	token_time := time.Unix(int64(now),0)
-	if current_time.Sub(token_time) > time.Duration(60 * time.Second) {
+	token_time := time.Unix(int64(now), 0)
+	if current_time.Sub(token_time) > time.Duration(60*time.Second) {
 		fmt.Printf("stale token\n")
 		fmt.Printf("%s %s\n", current_time, token_time)
 		return
@@ -124,13 +124,13 @@ func BuildConnection(ws *websocket.Conn) {
 	h := hmac.New(
 		sha1.New,
 		[]byte("6f1d916c-7761-4874-8d5b-8f8f93d20bf2"))
-	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s",uni,now,salt,ip_address)))
+	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s", uni, now, salt, ip_address)))
 	sum := fmt.Sprintf("%x", h.Sum(nil))
 	if sum != hmc {
 		fmt.Println("token HMAC doesn't match")
 		return
 	}
-	
+
 	onlineUser := &OnlineUser{
 		Connection: ws,
 		Nick:       uni,
@@ -143,7 +143,7 @@ func BuildConnection(ws *websocket.Conn) {
 	onlineUser.PullFromClient()
 	fmt.Printf("%s disconnected\n", uni)
 	runningRoom.Incoming <- IncomingMessage{"notice", "web user disconnected", uni}
-	delete(runningRoom.Users,onlineUser)
+	delete(runningRoom.Users, onlineUser)
 }
 
 // listen on a zmq SUB socket
@@ -155,7 +155,7 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 		// we ignore for now
 		_, _ = subsocket.Recv(0)
 		// then the actual message content
-    content, _ := subsocket.Recv(0)
+		content, _ := subsocket.Recv(0)
 
 		err := json.Unmarshal([]byte(content), &m)
 		if err != nil {
@@ -181,25 +181,25 @@ func websocketToZmq(pubsocket zmq.Socket) {
 			mtype = msg.Type
 		}
 		m := IncomingMessage{
-			Type: mtype,
-			Nick: msg.Nick,
+			Type:    mtype,
+			Nick:    msg.Nick,
 			Content: msg.Content,
 		}
 		b, _ := json.Marshal(m)
-		pubsocket.SendMultipart([][]byte{[]byte(PUB_KEY),b},0)
+		pubsocket.SendMultipart([][]byte{[]byte(PUB_KEY), b}, 0)
 	}
 }
 
 func main() {
 	context, _ := zmq.NewContext()
-  pubsocket, _ := context.NewSocket(zmq.PUB)
-  subsocket, _ := context.NewSocket(zmq.SUB)
-  defer context.Close()
-  defer pubsocket.Close()
-  defer subsocket.Close()
-  pubsocket.Bind("tcp://*:5557")
+	pubsocket, _ := context.NewSocket(zmq.PUB)
+	subsocket, _ := context.NewSocket(zmq.SUB)
+	defer context.Close()
+	defer pubsocket.Close()
+	defer subsocket.Close()
+	pubsocket.Bind("tcp://*:5557")
 	subsocket.SetSockOptString(zmq.SUBSCRIBE, PUB_KEY)
-  subsocket.Connect("tcp://localhost:5556")
+	subsocket.Connect("tcp://localhost:5556")
 
 	InitRoom()
 
@@ -213,4 +213,3 @@ func main() {
 		panic("ListenAndServe: " + err.Error())
 	}
 }
-
