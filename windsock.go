@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	zmq "github.com/alecthomas/gozmq"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 )
 
 var PUB_KEY = "gobot"
+// obviously, this should not be hard-coded in real life:
+var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
 
 type room struct {
 	Users     map[*OnlineUser]bool
@@ -37,6 +40,8 @@ type Message struct {
 
 var runningRoom *room = &room{}
 
+// listen for messages on a channel
+// and fan them out them to every user in the room
 func (r *room) run() {
 	for b := range r.Broadcast {
 		for u := range r.Users {
@@ -64,6 +69,8 @@ type OnlineUser struct {
 	Send       chan OutgoingMessage
 }
 
+// loop indefinitely, taking messages on a channel
+// and sending them out to the user's websocket
 func (this *OnlineUser) PushToClient() {
 	for b := range this.Send {
 		err := websocket.JSON.Send(this.Connection, b)
@@ -73,6 +80,8 @@ func (this *OnlineUser) PushToClient() {
 	}
 }
 
+// loop indefinitely listening for incoming
+// messages from a user's websocket
 func (this *OnlineUser) PullFromClient() {
 	for {
 		var content string
@@ -88,23 +97,19 @@ func (this *OnlineUser) PullFromClient() {
 	}
 }
 
-func BuildConnection(ws *websocket.Conn) {
-	token := ws.Request().URL.Query().Get("token")
-
+func validateToken(token string) (string, error) {
 	// token will look something like this:
 	// anp8:1344361884:667494:127.0.0.1:306233f64522f1f970fc62fb3cf2d7320c899851
 	parts := strings.Split(token, ":")
 	if len(parts) != 5 {
-		fmt.Println("invalid token")
-		return
+		return "", errors.New("invalid token")
 	}
 	// their UNI
 	uni := parts[0]
 	// UNIX timestamp
 	now, err := strconv.Atoi(parts[1])
 	if err != nil {
-		fmt.Printf("invalid timestamp in token")
-		return
+		return uni, errors.New("invalid timestamp in token")
 	}
 	// a random salt 
 	salt := parts[2]
@@ -116,20 +121,27 @@ func BuildConnection(ws *websocket.Conn) {
 	current_time := time.Now()
 	token_time := time.Unix(int64(now), 0)
 	if current_time.Sub(token_time) > time.Duration(60*time.Second) {
-		fmt.Printf("stale token\n")
-		fmt.Printf("%s %s\n", current_time, token_time)
-		return
+		return "", errors.New("stale token")
 	}
 	// TODO: check that their ip address matches
 
 	// check that the HMAC matches
 	h := hmac.New(
 		sha1.New,
-		[]byte("6f1d916c-7761-4874-8d5b-8f8f93d20bf2"))
+		[]byte(SECRET))
 	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s", uni, now, salt, ip_address)))
 	sum := fmt.Sprintf("%x", h.Sum(nil))
 	if sum != hmc {
-		fmt.Println("token HMAC doesn't match")
+		return "", errors.New("token HMAC doesn't match")
+	}
+	return uni, nil
+}
+
+func BuildConnection(ws *websocket.Conn) {
+	token := ws.Request().URL.Query().Get("token")
+	uni, err := validateToken(token)
+	if err != nil {
+		fmt.Println("validation error: " + err.Error())
 		return
 	}
 
