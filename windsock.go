@@ -18,7 +18,7 @@ var PUB_KEY = "gobot"
 type room struct {
 	Users     map[*OnlineUser]bool
 	Broadcast chan OutgoingMessage
-	Incoming  chan IncomingMessage
+	Incoming  chan Message
 }
 
 // what gets sent out to the browser
@@ -28,8 +28,8 @@ type OutgoingMessage struct {
 	Content string
 }
 
-// what comes in from zmq
-type IncomingMessage struct {
+// what comes in/out of zmq 
+type Message struct {
 	Type    string `json:"message_type"`
 	Content string `json:"content"`
 	Nick    string `json:"nick"`
@@ -53,7 +53,7 @@ func InitRoom() {
 	runningRoom = &room{
 		Users:     make(map[*OnlineUser]bool),
 		Broadcast: make(chan OutgoingMessage),
-		Incoming:  make(chan IncomingMessage),
+		Incoming:  make(chan Message),
 	}
 	go runningRoom.run()
 }
@@ -81,7 +81,7 @@ func (this *OnlineUser) PullFromClient() {
 		if err != nil {
 			return
 		}
-		runningRoom.Incoming <- IncomingMessage{"msg", content, this.Nick}
+		runningRoom.Incoming <- Message{"msg", content, this.Nick}
 		// need to echo back to ourself
 		msg := OutgoingMessage{time.Now(), this.Nick, content}
 		runningRoom.SendLine(msg)
@@ -141,14 +141,14 @@ func BuildConnection(ws *websocket.Conn) {
 	runningRoom.Users[onlineUser] = true
 	go onlineUser.PushToClient()
 	fmt.Printf("%s joined\n", uni)
-	runningRoom.Incoming <- IncomingMessage{"notice", uni, "joined as web user"}
+	runningRoom.Incoming <- Message{"status", uni, "joined as web user"}
 	onlineUser.PullFromClient()
 	fmt.Printf("%s disconnected\n", uni)
-	runningRoom.Incoming <- IncomingMessage{"notice", uni, "web user disconnected"}
+	runningRoom.Incoming <- Message{"status", uni, "web user disconnected"}
 	delete(runningRoom.Users, onlineUser)
 }
 
-func receiveZmqMessage(subsocket zmq.Socket, m *IncomingMessage) error {
+func receiveZmqMessage(subsocket zmq.Socket, m *Message) error {
 		// using zmq multi-part messages which will arrive
 		// in pairs. the first of which we don't care about so we discard.
 		_, _ = subsocket.Recv(0)
@@ -160,7 +160,7 @@ func receiveZmqMessage(subsocket zmq.Socket, m *IncomingMessage) error {
 // listen on a zmq SUB socket
 // and shovel messages from it out to the websockets
 func zmqToWebsocket(subsocket zmq.Socket) {
-	var m IncomingMessage
+	var m Message
 	for {
 		err := receiveZmqMessage(subsocket, &m)
 		if err != nil {
@@ -179,7 +179,7 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 }
 
 // send a message to the zmq PUB socket
-func sendMessage(pubsocket zmq.Socket, m IncomingMessage) {
+func sendMessage(pubsocket zmq.Socket, m Message) {
 	b, _ := json.Marshal(m)
 	pubsocket.SendMultipart([][]byte{[]byte(PUB_KEY),b},0)
 }
@@ -192,7 +192,7 @@ func websocketToZmq(pubsocket zmq.Socket) {
 		if msg.Type == "notice" {
 			mtype = msg.Type
 		}
-		sendMessage(pubsocket, IncomingMessage{mtype, msg.Nick, msg.Content})
+		sendMessage(pubsocket, Message{mtype, msg.Nick, msg.Content})
 	}
 }
 
