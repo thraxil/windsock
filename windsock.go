@@ -16,6 +16,7 @@ import (
 )
 
 var PUB_KEY = "gobot"
+
 // obviously, this should not be hard-coded in real life:
 var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
 
@@ -117,7 +118,6 @@ func validateToken(token string, current_time time.Time, remote_ip net.Addr) (st
 	ip_address := parts[3]
 	// the hmac of those parts with our shared secret
 	hmc := parts[4]
-
 	// make sure we're within a 60 second window
 	token_time := time.Unix(int64(now), 0)
 	if current_time.Sub(token_time) > time.Duration(60*time.Second) {
@@ -127,11 +127,8 @@ func validateToken(token string, current_time time.Time, remote_ip net.Addr) (st
 	if remote_ip.String() != ip_address {
 		return uni, errors.New("remote address doesn't match token")
 	}
-
 	// check that the HMAC matches
-	h := hmac.New(
-		sha1.New,
-		[]byte(SECRET))
+	h := hmac.New(sha1.New, []byte(SECRET))
 	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s", uni, now, salt, ip_address)))
 	sum := fmt.Sprintf("%x", h.Sum(nil))
 	if sum != hmc {
@@ -164,13 +161,12 @@ func BuildConnection(ws *websocket.Conn) {
 }
 
 func receiveZmqMessage(subsocket zmq.Socket, m *Message) error {
-		// using zmq multi-part messages which will arrive
-		// in pairs. the first of which we don't care about so we discard.
-		_, _ = subsocket.Recv(0)
-    content, _ := subsocket.Recv(0)
-		return json.Unmarshal([]byte(content), m)
+	// using zmq multi-part messages which will arrive
+	// in pairs. the first of which we don't care about so we discard.
+	_, _ = subsocket.Recv(0)
+	content, _ := subsocket.Recv(0)
+	return json.Unmarshal([]byte(content), m)
 }
-
 
 // listen on a zmq SUB socket
 // and shovel messages from it out to the websockets
@@ -196,7 +192,7 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 // send a message to the zmq PUB socket
 func sendMessage(pubsocket zmq.Socket, m Message) {
 	b, _ := json.Marshal(m)
-	pubsocket.SendMultipart([][]byte{[]byte(PUB_KEY),b},0)
+	pubsocket.SendMultipart([][]byte{[]byte(PUB_KEY), b}, 0)
 }
 
 // take messages from the Incoming channel
