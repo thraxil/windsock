@@ -97,7 +97,7 @@ func (this *OnlineUser) PullFromClient() {
 	}
 }
 
-func validateToken(token string) (string, error) {
+func validateToken(token string, current_time time.Time) (string, error) {
 	// token will look something like this:
 	// anp8:1344361884:667494:127.0.0.1:306233f64522f1f970fc62fb3cf2d7320c899851
 	parts := strings.Split(token, ":")
@@ -118,7 +118,6 @@ func validateToken(token string) (string, error) {
 	hmc := parts[4]
 
 	// make sure we're within a 60 second window
-	current_time := time.Now()
 	token_time := time.Unix(int64(now), 0)
 	if current_time.Sub(token_time) > time.Duration(60*time.Second) {
 		return "", errors.New("stale token")
@@ -139,7 +138,7 @@ func validateToken(token string) (string, error) {
 
 func BuildConnection(ws *websocket.Conn) {
 	token := ws.Request().URL.Query().Get("token")
-	uni, err := validateToken(token)
+	uni, err := validateToken(token, time.Now())
 	if err != nil {
 		fmt.Println("validation error: " + err.Error())
 		return
