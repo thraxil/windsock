@@ -59,8 +59,8 @@ func (r *room) run() {
 	}
 }
 
-func (r *room) SendMessage(line OutgoingMessage) {
-	r.Broadcast <- line
+func (r *room) SendMessage(msg OutgoingMessage) {
+	r.Broadcast <- msg
 }
 
 func InitRoom() {
@@ -154,6 +154,7 @@ func BuildConnection(ws *websocket.Conn) {
 	uni, err := validateToken(token, time.Now(), ws.RemoteAddr())
 	if err != nil {
 		fmt.Println("validation error: " + err.Error())
+		// how should this reply to the client?
 		return
 	}
 
