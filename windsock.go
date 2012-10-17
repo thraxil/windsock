@@ -16,6 +16,9 @@ import (
 )
 
 var PUB_KEY = "gobot"
+var PUB_SOCKET = "tcp://*:5557"
+var SUB_SOCKET = "tcp://localhost:5556"
+var WEBSOCKET_PORT = ":5050"
 
 // obviously, this should not be hard-coded in real life:
 var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
@@ -101,6 +104,11 @@ func (this *OnlineUser) PullFromClient() {
 	}
 }
 
+// improvements that should be made:
+// * include hash function name in the token (so we can swap it in the future)
+// * include a version number in the token (to enable backwards compatability)
+// * allow a mode where IP address isn't checked
+
 func validateToken(token string, current_time time.Time, remote_ip net.Addr) (string, error) {
 	// token will look something like this:
 	// anp8:1344361884:667494:127.0.0.1:306233f64522f1f970fc62fb3cf2d7320c899851
@@ -134,7 +142,7 @@ func validateToken(token string, current_time time.Time, remote_ip net.Addr) (st
 	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s", uni, now, salt, ip_address)))
 	sum := fmt.Sprintf("%x", h.Sum(nil))
 	if sum != hmc {
-		return "", errors.New("token HMAC doesn't match")
+		return uni, errors.New("token HMAC doesn't match")
 	}
 	return uni, nil
 }
@@ -216,9 +224,9 @@ func main() {
 	defer context.Close()
 	defer pubsocket.Close()
 	defer subsocket.Close()
-	pubsocket.Bind("tcp://*:5557")
+	pubsocket.Bind(PUB_SOCKET)
 	subsocket.SetSockOptString(zmq.SUBSCRIBE, PUB_KEY)
-	subsocket.Connect("tcp://localhost:5556")
+	subsocket.Connect(SUB_SOCKET)
 
 	InitRoom()
 
@@ -227,7 +235,7 @@ func main() {
 	go zmqToWebsocket(subsocket)
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
-	err := http.ListenAndServe(":5050", nil)
+	err := http.ListenAndServe(WEBSOCKET_PORT, nil)
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}
