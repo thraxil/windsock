@@ -25,6 +25,8 @@ var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
 
 var AUTH_WINDOW = 60 * time.Second
 
+// bundle a list of online users along with
+// in and out channels
 type room struct {
 	Users     map[*OnlineUser]bool
 	Broadcast chan OutgoingMessage
@@ -57,7 +59,7 @@ func (r *room) run() {
 	}
 }
 
-func (r *room) SendLine(line OutgoingMessage) {
+func (r *room) SendMessage(line OutgoingMessage) {
 	r.Broadcast <- line
 }
 
@@ -100,7 +102,7 @@ func (this *OnlineUser) PullFromClient() {
 		runningRoom.Incoming <- Message{"msg", content, this.Nick}
 		// need to echo back to ourself
 		msg := OutgoingMessage{time.Now(), this.Nick, content}
-		runningRoom.SendLine(msg)
+		runningRoom.SendMessage(msg)
 	}
 }
 
@@ -162,10 +164,8 @@ func BuildConnection(ws *websocket.Conn) {
 	}
 	runningRoom.Users[onlineUser] = true
 	go onlineUser.PushToClient()
-	fmt.Printf("%s joined\n", uni)
 	runningRoom.Incoming <- Message{"status", uni, "joined as web user"}
 	onlineUser.PullFromClient()
-	fmt.Printf("%s disconnected\n", uni)
 	runningRoom.Incoming <- Message{"status", uni, "web user disconnected"}
 	delete(runningRoom.Users, onlineUser)
 }
@@ -195,7 +195,7 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 		}
 		// turn it into a proper outgoing message and send it
 		msg := OutgoingMessage{time.Now(), m.Nick, m.Content}
-		runningRoom.SendLine(msg)
+		runningRoom.SendMessage(msg)
 	}
 }
 
