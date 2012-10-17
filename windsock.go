@@ -20,6 +20,8 @@ var PUB_KEY = "gobot"
 // obviously, this should not be hard-coded in real life:
 var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
 
+var AUTH_WINDOW = 60 * time.Second
+
 type room struct {
 	Users     map[*OnlineUser]bool
 	Broadcast chan OutgoingMessage
@@ -120,7 +122,7 @@ func validateToken(token string, current_time time.Time, remote_ip net.Addr) (st
 	hmc := parts[4]
 	// make sure we're within a 60 second window
 	token_time := time.Unix(int64(now), 0)
-	if current_time.Sub(token_time) > time.Duration(60*time.Second) {
+	if current_time.Sub(token_time) > time.Duration(AUTH_WINDOW) {
 		return uni, errors.New("stale token")
 	}
 	// check that their ip address matches
