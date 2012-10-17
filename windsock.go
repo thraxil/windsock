@@ -135,10 +135,18 @@ func validateToken(token string, current_time time.Time, remote_ip net.Addr) (st
 	if current_time.Sub(token_time) > time.Duration(AUTH_WINDOW) {
 		return uni, errors.New("stale token")
 	}
-	// check that their ip address matches
-	if remote_ip.String() != ip_address {
-		return uni, errors.New("remote address doesn't match token")
-	}
+
+	// TODO: check that their ip address matches
+  // PROBLEM: remote_ip is something like: "http://127.0.0.1:8000" 
+  // instead of "127.0.0.1", so we still need to figure out how
+	// to get the IP address out of there (and make sure it is the right
+  // end of the connection)
+
+//	if remote_ip.String() != ip_address {
+//		fmt.Printf("%s %s\n",remote_ip.String(), ip_address)
+//		return uni, errors.New("remote address doesn't match token")
+//	}
+
 	// check that the HMAC matches
 	h := hmac.New(sha1.New, []byte(SECRET))
 	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s", uni, now, salt, ip_address)))
