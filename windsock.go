@@ -173,9 +173,9 @@ func BuildConnection(ws *websocket.Conn) {
 	}
 	runningRoom.Users[onlineUser] = true
 	go onlineUser.PushToClient()
-	runningRoom.Incoming <- Message{"status", uni, "joined as web user"}
+	runningRoom.Incoming <- Message{"status", "joined as web user", uni}
 	onlineUser.PullFromClient()
-	runningRoom.Incoming <- Message{"status", uni, "web user disconnected"}
+	runningRoom.Incoming <- Message{"status", "web user disconnected", uni}
 	delete(runningRoom.Users, onlineUser)
 }
 
@@ -222,7 +222,7 @@ func websocketToZmq(pubsocket zmq.Socket) {
 		if msg.Type == "notice" {
 			mtype = msg.Type
 		}
-		sendMessage(pubsocket, Message{mtype, msg.Nick, msg.Content})
+		sendMessage(pubsocket, Message{mtype, msg.Content, msg.Nick})
 	}
 }
 
@@ -244,7 +244,7 @@ func main() {
 	go zmqToWebsocket(subsocket)
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
-	err := http.ListenAndServe(WEBSOCKET_PORT, nil)
+	err := http.ListenAndServeTLS(WEBSOCKET_PORT, "cert.pem", "key.pem", nil)
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}
