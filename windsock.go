@@ -79,7 +79,6 @@ func InitRoom() {
 
 type OnlineUser struct {
 	Connection *websocket.Conn
-	Nick       string
 	Uci        userConnectionInfo
 	Send       chan envelope
 }
@@ -186,7 +185,6 @@ func BuildConnection(ws *websocket.Conn) {
 
 	onlineUser := &OnlineUser{
 		Connection: ws,
-		Nick:       uci.Uni,
 		Uci:        uci,
 		Send:       make(chan envelope, 256),
 	}
