@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-var PUB_KEY = "gobot"
-var PUB_SOCKET = "tcp://*:5557"
+var REQ_SOCKET = "tcp://localhost:5555"
 var SUB_SOCKET = "tcp://localhost:5556"
 var WEBSOCKET_PORT = ":5050"
+var SUB_KEY = ""
 
 // obviously, this should not be hard-coded in real life:
 var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
@@ -29,45 +29,50 @@ var AUTH_WINDOW = 60 * time.Second
 // in and out channels
 type room struct {
 	Users     map[*OnlineUser]bool
-	Broadcast chan OutgoingMessage
-	Incoming  chan Message
+	Broadcast chan envelope
+	Incoming  chan envelope
 }
 
-// what gets sent out to the browser
-type OutgoingMessage struct {
-	Time    time.Time
-	Nick    string
-	Content string
-}
-
-// what comes in/out of zmq 
-type Message struct {
-	Type    string `json:"message_type"`
+// how we route zmq messages around
+type envelope struct {
+	Address string `json:"address"`
 	Content string `json:"content"`
-	Nick    string `json:"nick"`
+}
+
+func startswith(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
+	}
+	return s[:len(prefix)] == prefix
+}
+
+func (e envelope) RouteTo(u *OnlineUser) bool {
+	return startswith(e.Address, u.Uci.SubPrefix)
 }
 
 var runningRoom *room = &room{}
 
 // listen for messages on a channel
-// and fan them out them to every user in the room
+// and route them out them to appropriate users
 func (r *room) run() {
-	for b := range r.Broadcast {
+	for e := range r.Broadcast {
 		for u := range r.Users {
-			u.Send <- b
+			if e.RouteTo(u) {
+				u.Send <- e
+			}
 		}
 	}
 }
 
-func (r *room) SendMessage(msg OutgoingMessage) {
-	r.Broadcast <- msg
+func (r *room) SendMessage(e envelope) {
+	r.Broadcast <- e
 }
 
 func InitRoom() {
 	runningRoom = &room{
 		Users:     make(map[*OnlineUser]bool),
-		Broadcast: make(chan OutgoingMessage),
-		Incoming:  make(chan Message),
+		Broadcast: make(chan envelope),
+		Incoming:  make(chan envelope),
 	}
 	go runningRoom.run()
 }
@@ -75,14 +80,16 @@ func InitRoom() {
 type OnlineUser struct {
 	Connection *websocket.Conn
 	Nick       string
-	Send       chan OutgoingMessage
+	Uci        userConnectionInfo
+	Send       chan envelope
 }
 
 // loop indefinitely, taking messages on a channel
 // and sending them out to the user's websocket
 func (this *OnlineUser) PushToClient() {
-	for b := range this.Send {
-		err := websocket.JSON.Send(this.Connection, b)
+	for e := range this.Send {
+		err := websocket.JSON.Send(this.Connection, e)
+		fmt.Println("sent websocket message")
 		if err != nil {
 			break
 		}
@@ -99,11 +106,15 @@ func (this *OnlineUser) PullFromClient() {
 		if err != nil {
 			return
 		}
-		runningRoom.Incoming <- Message{"msg", content, this.Nick}
-		// need to echo back to ourself
-		msg := OutgoingMessage{time.Now(), this.Nick, content}
-		runningRoom.SendMessage(msg)
+		fmt.Println("incoming:", content)
+		runningRoom.Incoming <- envelope{this.Uci.PubPrefix, content}
 	}
+}
+
+type userConnectionInfo struct {
+	Uni       string
+	SubPrefix string
+	PubPrefix string
 }
 
 // improvements that should be made:
@@ -111,55 +122,62 @@ func (this *OnlineUser) PullFromClient() {
 // * include a version number in the token (to enable backwards compatability)
 // * allow a mode where IP address isn't checked
 
-func validateToken(token string, current_time time.Time, remote_ip net.Addr) (string, error) {
+func validateToken(token string, current_time time.Time,
+	remote_ip net.Addr, uci *userConnectionInfo) error {
 	// token will look something like this:
-	// anp8:1344361884:667494:127.0.0.1:306233f64522f1f970fc62fb3cf2d7320c899851
+	// anp8:gobot:gobot.browser.anp8:1344361884:667494:127.0.0.1:306233f64522f1f970fc62fb3cf2d7320c899851
 	parts := strings.Split(token, ":")
-	if len(parts) != 5 {
-		return "", errors.New("invalid token")
+	if len(parts) != 7 {
+		return errors.New("invalid token")
 	}
 	// their UNI
 	uni := parts[0]
+	sub_prefix := parts[1]
+	pub_prefix := parts[2]
+	uci.Uni = uni
+	uci.SubPrefix = sub_prefix
+	uci.PubPrefix = pub_prefix
 	// UNIX timestamp
-	now, err := strconv.Atoi(parts[1])
+	now, err := strconv.Atoi(parts[3])
 	if err != nil {
-		return uni, errors.New("invalid timestamp in token")
+		return errors.New("invalid timestamp in token")
 	}
 	// a random salt 
-	salt := parts[2]
-	ip_address := parts[3]
+	salt := parts[4]
+	ip_address := parts[5]
 	// the hmac of those parts with our shared secret
-	hmc := parts[4]
+	hmc := parts[6]
 	// make sure we're within a 60 second window
 	token_time := time.Unix(int64(now), 0)
 	if current_time.Sub(token_time) > time.Duration(AUTH_WINDOW) {
-		return uni, errors.New("stale token")
+		return errors.New("stale token")
 	}
 
 	// TODO: check that their ip address matches
-  // PROBLEM: remote_ip is something like: "http://127.0.0.1:8000" 
-  // instead of "127.0.0.1", so we still need to figure out how
+	// PROBLEM: remote_ip is something like: "http://127.0.0.1:8000" 
+	// instead of "127.0.0.1", so we still need to figure out how
 	// to get the IP address out of there (and make sure it is the right
-  // end of the connection)
+	// end of the connection)
 
-//	if remote_ip.String() != ip_address {
-//		fmt.Printf("%s %s\n",remote_ip.String(), ip_address)
-//		return uni, errors.New("remote address doesn't match token")
-//	}
+	//	if remote_ip.String() != ip_address {
+	//		fmt.Printf("%s %s\n",remote_ip.String(), ip_address)
+	//		return uni, errors.New("remote address doesn't match token")
+	//	}
 
 	// check that the HMAC matches
 	h := hmac.New(sha1.New, []byte(SECRET))
-	h.Write([]byte(fmt.Sprintf("%s:%d:%s:%s", uni, now, salt, ip_address)))
+	h.Write([]byte(fmt.Sprintf("%s:%s:%s:%d:%s:%s", uni, sub_prefix, pub_prefix, now, salt, ip_address)))
 	sum := fmt.Sprintf("%x", h.Sum(nil))
 	if sum != hmc {
-		return uni, errors.New("token HMAC doesn't match")
+		return errors.New("token HMAC doesn't match")
 	}
-	return uni, nil
+	return nil
 }
 
 func BuildConnection(ws *websocket.Conn) {
 	token := ws.Request().URL.Query().Get("token")
-	uni, err := validateToken(token, time.Now(), ws.RemoteAddr())
+	var uci userConnectionInfo
+	err := validateToken(token, time.Now(), ws.RemoteAddr(), &uci)
 	if err != nil {
 		fmt.Println("validation error: " + err.Error())
 		// how should this reply to the client?
@@ -168,79 +186,61 @@ func BuildConnection(ws *websocket.Conn) {
 
 	onlineUser := &OnlineUser{
 		Connection: ws,
-		Nick:       uni,
-		Send:       make(chan OutgoingMessage, 256),
+		Nick:       uci.Uni,
+		Uci:        uci,
+		Send:       make(chan envelope, 256),
 	}
 	runningRoom.Users[onlineUser] = true
 	go onlineUser.PushToClient()
-	runningRoom.Incoming <- Message{"status", "joined as web user", uni}
 	onlineUser.PullFromClient()
-	runningRoom.Incoming <- Message{"status", "web user disconnected", uni}
 	delete(runningRoom.Users, onlineUser)
-}
-
-func receiveZmqMessage(subsocket zmq.Socket, m *Message) error {
-	// using zmq multi-part messages which will arrive
-	// in pairs. the first of which we don't care about so we discard.
-	_, _ = subsocket.Recv(0)
-	content, _ := subsocket.Recv(0)
-	return json.Unmarshal([]byte(content), m)
 }
 
 // listen on a zmq SUB socket
 // and shovel messages from it out to the websockets
 func zmqToWebsocket(subsocket zmq.Socket) {
-	var m Message
 	for {
-		err := receiveZmqMessage(subsocket, &m)
-		if err != nil {
-			// just ignore any invalid messages
-			continue
-		}
-
-		if m.Type != "message" {
-			fmt.Printf("can only handle messages right now")
-			continue
-		}
-		// turn it into a proper outgoing message and send it
-		msg := OutgoingMessage{time.Now(), m.Nick, m.Content}
-		runningRoom.SendMessage(msg)
+		address, _ := subsocket.Recv(0)
+		content, _ := subsocket.Recv(0)
+		fmt.Println("received a zmq message")
+		fmt.Println(string(address))
+		fmt.Println(string(content))
+		runningRoom.SendMessage(envelope{string(address), string(content)})
 	}
 }
 
 // send a message to the zmq PUB socket
-func sendMessage(pubsocket zmq.Socket, m Message) {
-	b, _ := json.Marshal(m)
-	pubsocket.SendMultipart([][]byte{[]byte(PUB_KEY), b}, 0)
+func sendMessage(reqsocket zmq.Socket, e envelope) {
+	serialized_envelope, _ := json.Marshal(e)
+	reqsocket.Send([]byte(serialized_envelope), 0)
+	// wait for a reply
+	reqsocket.Recv(0)
 }
 
 // take messages from the Incoming channel
 // and just shovel them out to the zmq PUB socket
-func websocketToZmq(pubsocket zmq.Socket) {
+func websocketToZmq(reqsocket zmq.Socket) {
 	for msg := range runningRoom.Incoming {
-		var mtype = "message"
-		if msg.Type == "notice" {
-			mtype = msg.Type
-		}
-		sendMessage(pubsocket, Message{mtype, msg.Content, msg.Nick})
+		// this could potentially be done async:
+		sendMessage(reqsocket, msg)
 	}
 }
 
 func main() {
 	context, _ := zmq.NewContext()
-	pubsocket, _ := context.NewSocket(zmq.PUB)
 	subsocket, _ := context.NewSocket(zmq.SUB)
+	reqsocket, _ := context.NewSocket(zmq.REQ)
 	defer context.Close()
-	defer pubsocket.Close()
+	defer reqsocket.Close()
 	defer subsocket.Close()
-	pubsocket.Bind(PUB_SOCKET)
-	subsocket.SetSockOptString(zmq.SUBSCRIBE, PUB_KEY)
+	reqsocket.Connect(REQ_SOCKET)
+	subsocket.SetSockOptString(zmq.SUBSCRIBE, SUB_KEY)
 	subsocket.Connect(SUB_SOCKET)
 
 	InitRoom()
 
 	// two goroutines to move messages in each direction
-	go websocketToZmq(pubsocket)
+	go websocketToZmq(reqsocket)
 	go zmqToWebsocket(subsocket)
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
