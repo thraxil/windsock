@@ -175,6 +175,7 @@ func validateToken(token string, current_time time.Time,
 
 func BuildConnection(ws *websocket.Conn) {
 	token := ws.Request().URL.Query().Get("token")
+	fmt.Println(token)
 	var uci userConnectionInfo
 	err := validateToken(token, time.Now(), ws.RemoteAddr(), &uci)
 	if err != nil {
@@ -242,7 +243,7 @@ func main() {
 	go zmqToWebsocket(subsocket)
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
-	err := http.ListenAndServeTLS(WEBSOCKET_PORT, "cert.pem", "key.pem", nil)
+	err := http.ListenAndServe(WEBSOCKET_PORT, nil)
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}
