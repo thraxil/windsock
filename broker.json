@@ -1,4 +1,4 @@
 {
-				'RepSocket': "tcp://*:5555",
-				'PubSocket': "tcp://*:5556"
+				"RepSocket": "tcp://*:5555",
+				"PubSocket": "tcp://*:5556"
 }

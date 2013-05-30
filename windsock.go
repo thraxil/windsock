@@ -6,19 +6,16 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	zmq "github.com/alecthomas/gozmq"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
-
-var REQ_SOCKET = "tcp://localhost:5555"
-var SUB_SOCKET = "tcp://localhost:5556"
-var WEBSOCKET_PORT = ":5050"
-var SUB_KEY = ""
 
 // obviously, this should not be hard-coded in real life:
 var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
@@ -225,16 +222,37 @@ func websocketToZmq(reqsocket zmq.Socket) {
 	}
 }
 
+type ConfigData struct {
+	Secret        string
+	SubSocket     string
+	ReqSocket     string
+	WebSocketPort string
+	SubKey        string
+}
+
 func main() {
+	var configfile string
+	flag.StringVar(&configfile, "config", "./windsock.json", "Windsock JSON config file")
+	flag.Parse()
+
+	file, err := ioutil.ReadFile(configfile)
+	if err != nil {
+		panic("could not read config file: " + err.Error())
+	}
+
+	f := ConfigData{}
+	err = json.Unmarshal(file, &f)
+	SECRET = f.Secret
+
 	context, _ := zmq.NewContext()
 	subsocket, _ := context.NewSocket(zmq.SUB)
 	reqsocket, _ := context.NewSocket(zmq.REQ)
 	defer context.Close()
 	defer reqsocket.Close()
 	defer subsocket.Close()
-	reqsocket.Connect(REQ_SOCKET)
-	subsocket.SetSockOptString(zmq.SUBSCRIBE, SUB_KEY)
-	subsocket.Connect(SUB_SOCKET)
+	reqsocket.Connect(f.ReqSocket)
+	subsocket.SetSockOptString(zmq.SUBSCRIBE, f.SubKey)
+	subsocket.Connect(f.SubSocket)
 
 	InitRoom()
 
@@ -243,7 +261,7 @@ func main() {
 	go zmqToWebsocket(subsocket)
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
-	err := http.ListenAndServe(WEBSOCKET_PORT, nil)
+	err = http.ListenAndServe(f.WebSocketPort, nil)
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}

@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	zmq "github.com/alecthomas/gozmq"
 	"io/ioutil"
 )
@@ -28,7 +27,7 @@ func main() {
 
 	file, err := ioutil.ReadFile(configfile)
 	if err != nil {
-		fmt.Println("could not read config file")
+		panic("could not read config file: " + err.Error())
 	}
 
 	f := ConfigData{}
