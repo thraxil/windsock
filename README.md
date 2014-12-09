@@ -1,5 +1,9 @@
 compiling (on ubuntu):
 
+Obviously, you'll need the basic Go compiler installed and your
+`GOPATH` environment variable set up. Then you just need the ZMQ
+libraries available.
+
      $ sudo aptitude install libzmq-dev
      $ make install_deps
      $ make
@@ -28,3 +32,10 @@ standard library
 (http://golang.org/src/pkg/crypto/tls/generate_cert.go). Compile it
 with `go build generate_cert.go` and run `./generate_cert`. Don't use
 self-signed certificates in production though.
+
+
+The `client.py` and `sub.py` programs are included as examples of how
+you might interact with windsock and the broker. `sub.py` just
+subscribes to the broker and prints every message that comes across to
+STDOUT (handy for debugging). `client.py` lets you type into STDIN and
+sends whatever you type to the broker.
