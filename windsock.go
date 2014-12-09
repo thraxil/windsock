@@ -1,20 +1,21 @@
 package main
 
 import (
-	"code.google.com/p/go.net/websocket"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	zmq "github.com/alecthomas/gozmq"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"code.google.com/p/go.net/websocket"
+	zmq "github.com/alecthomas/gozmq"
 )
 
 // obviously, this should not be hard-coded in real life:
@@ -138,7 +139,7 @@ func validateToken(token string, current_time time.Time,
 	if err != nil {
 		return errors.New("invalid timestamp in token")
 	}
-	// a random salt 
+	// a random salt
 	salt := parts[4]
 	ip_address := parts[5]
 	// the hmac of those parts with our shared secret
@@ -150,7 +151,7 @@ func validateToken(token string, current_time time.Time,
 	}
 
 	// TODO: check that their ip address matches
-	// PROBLEM: remote_ip is something like: "http://127.0.0.1:8000" 
+	// PROBLEM: remote_ip is something like: "http://127.0.0.1:8000"
 	// instead of "127.0.0.1", so we still need to figure out how
 	// to get the IP address out of there (and make sure it is the right
 	// end of the connection)
@@ -228,6 +229,8 @@ type ConfigData struct {
 	ReqSocket     string
 	WebSocketPort string
 	SubKey        string
+	Certificate   string
+	Key           string
 }
 
 func main() {
@@ -257,11 +260,17 @@ func main() {
 	InitRoom()
 
 	// two goroutines to move messages in each direction
-	go websocketToZmq(reqsocket)
-	go zmqToWebsocket(subsocket)
+	go websocketToZmq(*reqsocket)
+	go zmqToWebsocket(*subsocket)
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
-	err = http.ListenAndServe(f.WebSocketPort, nil)
+
+	if f.Certificate != "" && f.Key != "" {
+		// configured for SSL
+		err = http.ListenAndServeTLS(f.WebSocketPort, f.Certificate, f.Key, nil)
+	} else {
+		err = http.ListenAndServe(f.WebSocketPort, nil)
+	}
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}

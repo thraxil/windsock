@@ -1,0 +1,9 @@
+{
+				"Secret": "6f1d916c-7761-4874-8d5b-8f8f93d20bf2",
+				"ReqSocket": "tcp://localhost:5555",
+				"SubSocket": "tcp://localhost:5556",
+				"WebSocketPort": ":5050",
+        "Certificate": "cert.pem",
+        "Key": "key.pem",
+				"SubKey": ""
+}
