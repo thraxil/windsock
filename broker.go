@@ -6,8 +6,9 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	zmq "github.com/alecthomas/gozmq"
 	"io/ioutil"
+
+	zmq "github.com/pebbe/zmq2"
 )
 
 type envelope struct {
@@ -33,10 +34,8 @@ func main() {
 	f := ConfigData{}
 	err = json.Unmarshal(file, &f)
 
-	context, _ := zmq.NewContext()
-	pubsocket, _ := context.NewSocket(zmq.PUB)
-	repsocket, _ := context.NewSocket(zmq.REP)
-	defer context.Close()
+	pubsocket, _ := zmq.NewSocket(zmq.PUB)
+	repsocket, _ := zmq.NewSocket(zmq.REP)
 	defer pubsocket.Close()
 	defer repsocket.Close()
 	pubsocket.Bind(f.PubSocket)
@@ -46,7 +45,8 @@ func main() {
 	for {
 		msg, _ := repsocket.Recv(0)
 		json.Unmarshal([]byte(msg), &e)
-		pubsocket.SendMultipart([][]byte{[]byte(e.Address), []byte(e.Content)}, 0)
-		repsocket.Send([]byte("published"), 0)
+		pubsocket.Send(e.Address, zmq.SNDMORE)
+		pubsocket.Send(e.Content, 0)
+		repsocket.Send("published", 0)
 	}
 }

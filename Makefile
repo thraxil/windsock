@@ -11,5 +11,5 @@ clean:
 	rm -f windsock
 
 install_deps:
-	go get -u github.com/alecthomas/gozmq
+	go get -u github.com/pebbe/zmq2
 	go get -u code.google.com/p/go.net/websocket

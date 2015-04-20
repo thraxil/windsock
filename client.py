@@ -1,5 +1,5 @@
 import zmq
-from simplejson import dumps
+from json import dumps
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)

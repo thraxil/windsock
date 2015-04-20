@@ -1,6 +1,6 @@
 import sys
 import zmq
-from simplejson import loads
+from json import loads
 
 PUB_KEY = "test"
 PUB_SOCKET = "tcp://localhost:5556"

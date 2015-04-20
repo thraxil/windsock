@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"code.google.com/p/go.net/websocket"
-	zmq "github.com/alecthomas/gozmq"
+	zmq "github.com/pebbe/zmq2"
 )
 
 // obviously, this should not be hard-coded in real life:
@@ -209,7 +209,7 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 // send a message to the zmq PUB socket
 func sendMessage(reqsocket zmq.Socket, e envelope) {
 	serialized_envelope, _ := json.Marshal(e)
-	reqsocket.Send([]byte(serialized_envelope), 0)
+	reqsocket.Send(string(serialized_envelope), 0)
 	// wait for a reply
 	reqsocket.Recv(0)
 }
@@ -247,14 +247,12 @@ func main() {
 	err = json.Unmarshal(file, &f)
 	SECRET = f.Secret
 
-	context, _ := zmq.NewContext()
-	subsocket, _ := context.NewSocket(zmq.SUB)
-	reqsocket, _ := context.NewSocket(zmq.REQ)
-	defer context.Close()
+	subsocket, _ := zmq.NewSocket(zmq.SUB)
+	reqsocket, _ := zmq.NewSocket(zmq.REQ)
 	defer reqsocket.Close()
 	defer subsocket.Close()
 	reqsocket.Connect(f.ReqSocket)
-	subsocket.SetSockOptString(zmq.SUBSCRIBE, f.SubKey)
+	subsocket.SetSubscribe(f.SubKey)
 	subsocket.Connect(f.SubSocket)
 
 	InitRoom()
