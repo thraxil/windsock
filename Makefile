@@ -12,4 +12,4 @@ clean:
 
 install_deps:
 	go get -u github.com/pebbe/zmq2
-	go get -u code.google.com/p/go.net/websocket
+	go get -u golang.org/x/net/websocket
