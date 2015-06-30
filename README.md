@@ -39,3 +39,16 @@ you might interact with windsock and the broker. `sub.py` just
 subscribes to the broker and prints every message that comes across to
 STDOUT (handy for debugging). `client.py` lets you type into STDIN and
 sends whatever you type to the broker.
+
+
+Known issues:
+
+If you're using go version 1.4.2 with windsock, you might get this
+"invalid heap pointer" error: https://github.com/pebbe/zmq2/issues/3
+
+There are a few workarounds for this:
+   * Use go version 1.3.x
+   * **Or**, use libzmq version 4, with https://github.com/pebbe/zmq4.
+     In order to do this, you need to install the `libzmq3-dev`
+     (sic) package in ubuntu, and switch `pebbe/zmq2` to `pebbe/zmq4`
+     in the source files.
