@@ -1,0 +1,10 @@
+FROM golang
+RUN apt-get update
+RUN apt-get install pkg-config libzmq-dev -y
+RUN go get github.com/pebbe/zmq2
+RUN go get golang.org/x/net/websocket
+ADD . /go/src/github.com/thraxil/windsock
+WORKDIR /go/src/github.com/thraxil/windsock
+RUN go build windsock.go
+EXPOSE 5050
+CMD ["/go/src/github.com/thraxil/windsock/windsock", "-config=/go/src/github.com/thraxil/windsock/windsock-docker.json"]
