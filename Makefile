@@ -13,6 +13,8 @@ clean:
 install_deps:
 	go get -u github.com/pebbe/zmq2
 	go get -u golang.org/x/net/websocket
+	go get -u github.com/Sirupsen/logrus
+	go get -u github.com/kelseyhightower/envconfig
 
 build: *.go
 	docker build -f Dockerfile-broker -t thraxil/windsock-broker .

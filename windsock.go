@@ -14,8 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/websocket"
+	log "github.com/Sirupsen/logrus"
+	"github.com/kelseyhightower/envconfig"
 	zmq "github.com/pebbe/zmq2"
+	"golang.org/x/net/websocket"
 )
 
 // obviously, this should not be hard-coded in real life:
@@ -53,6 +55,7 @@ var runningRoom *room = &room{}
 // listen for messages on a channel
 // and route them out them to appropriate users
 func (r *room) run() {
+	log.Debug("room.run()")
 	for e := range r.Broadcast {
 		for u := range r.Users {
 			if e.RouteTo(u) {
@@ -67,6 +70,7 @@ func (r *room) SendMessage(e envelope) {
 }
 
 func InitRoom() {
+	log.Debug("InitRoom()")
 	runningRoom = &room{
 		Users:     make(map[*OnlineUser]bool),
 		Broadcast: make(chan envelope),
@@ -86,7 +90,7 @@ type OnlineUser struct {
 func (this *OnlineUser) PushToClient() {
 	for e := range this.Send {
 		err := websocket.JSON.Send(this.Connection, e)
-		fmt.Println("sent websocket message")
+		log.Info("sent websocket message")
 		if err != nil {
 			break
 		}
@@ -103,7 +107,7 @@ func (this *OnlineUser) PullFromClient() {
 		if err != nil {
 			return
 		}
-		fmt.Println("incoming:", content)
+		log.Info("incoming:", content)
 		runningRoom.Incoming <- envelope{this.Uci.PubPrefix, content}
 	}
 }
@@ -125,6 +129,11 @@ func validateToken(token string, current_time time.Time,
 	// anp8:gobot:gobot.browser.anp8:1344361884:667494:127.0.0.1:306233f64522f1f970fc62fb3cf2d7320c899851
 	parts := strings.Split(token, ":")
 	if len(parts) != 7 {
+		log.WithFields(
+			log.Fields{
+				"token": token,
+				"parts": len(parts),
+			}).Error("couldn't parse token")
 		return errors.New("invalid token")
 	}
 	// their UNI
@@ -137,6 +146,12 @@ func validateToken(token string, current_time time.Time,
 	// UNIX timestamp
 	now, err := strconv.Atoi(parts[3])
 	if err != nil {
+		log.WithFields(log.Fields{
+			"token":           token,
+			"timestamp_field": parts[3],
+			"now":             now,
+			"error":           err,
+		}).Error("invalid timestamp in token")
 		return errors.New("invalid timestamp in token")
 	}
 	// a random salt
@@ -147,6 +162,7 @@ func validateToken(token string, current_time time.Time,
 	// make sure we're within a 60 second window
 	token_time := time.Unix(int64(now), 0)
 	if current_time.Sub(token_time) > time.Duration(AUTH_WINDOW) {
+		log.Error("stale token")
 		return errors.New("stale token")
 	}
 
@@ -166,18 +182,26 @@ func validateToken(token string, current_time time.Time,
 	h.Write([]byte(fmt.Sprintf("%s:%s:%s:%d:%s:%s", uni, sub_prefix, pub_prefix, now, salt, ip_address)))
 	sum := fmt.Sprintf("%x", h.Sum(nil))
 	if sum != hmc {
+		log.WithFields(log.Fields{
+			"token":      token,
+			"expected":   hmc,
+			"calculated": sum,
+		}).Error("token HMAC doesn't match")
 		return errors.New("token HMAC doesn't match")
 	}
 	return nil
 }
 
 func BuildConnection(ws *websocket.Conn) {
+	log.Info("BuildConnection()")
 	token := ws.Request().URL.Query().Get("token")
-	fmt.Println(token)
+	log.Debug(token)
 	var uci userConnectionInfo
 	err := validateToken(token, time.Now(), ws.RemoteAddr(), &uci)
 	if err != nil {
-		fmt.Println("validation error: " + err.Error())
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("validation error")
 		// how should this reply to the client?
 		return
 	}
@@ -191,6 +215,7 @@ func BuildConnection(ws *websocket.Conn) {
 	go onlineUser.PushToClient()
 	onlineUser.PullFromClient()
 	delete(runningRoom.Users, onlineUser)
+	log.Info("tore down user connection")
 }
 
 // listen on a zmq SUB socket
@@ -199,9 +224,10 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 	for {
 		address, _ := subsocket.Recv(0)
 		content, _ := subsocket.Recv(0)
-		fmt.Println("received a zmq message")
-		fmt.Println(string(address))
-		fmt.Println(string(content))
+		log.WithFields(log.Fields{
+			"address": string(address),
+			"content": string(content),
+		}).Info("received a zmq message")
 		runningRoom.SendMessage(envelope{string(address), string(content)})
 	}
 }
@@ -233,19 +259,47 @@ type ConfigData struct {
 	Key           string
 }
 
+type config struct {
+	LogLevel string `envconfig:"LOG_LEVEL"`
+}
+
 func main() {
+	log.SetLevel(log.InfoLevel)
 	var configfile string
 	flag.StringVar(&configfile, "config", "./windsock.json", "Windsock JSON config file")
 	flag.Parse()
 
 	file, err := ioutil.ReadFile(configfile)
 	if err != nil {
-		panic("could not read config file: " + err.Error())
+		log.Fatal(err)
 	}
 
 	f := ConfigData{}
 	err = json.Unmarshal(file, &f)
+	if err != nil {
+		log.Fatal(err)
+	}
 	SECRET = f.Secret
+
+	var c config
+	err = envconfig.Process("windsock", &c)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	// defaults to INFO
+	if c.LogLevel == "DEBUG" {
+		log.SetLevel(log.DebugLevel)
+	}
+	if c.LogLevel == "WARN" {
+		log.SetLevel(log.WarnLevel)
+	}
+	if c.LogLevel == "ERROR" {
+		log.SetLevel(log.ErrorLevel)
+	}
+	if c.LogLevel == "FATAL" {
+		log.SetLevel(log.FatalLevel)
+	}
 
 	subsocket, _ := zmq.NewSocket(zmq.SUB)
 	reqsocket, _ := zmq.NewSocket(zmq.REQ)
@@ -265,11 +319,13 @@ func main() {
 
 	if f.Certificate != "" && f.Key != "" {
 		// configured for SSL
+		log.Info("starting WSS on ", f.WebSocketPort)
 		err = http.ListenAndServeTLS(f.WebSocketPort, f.Certificate, f.Key, nil)
 	} else {
+		log.Info("starting WS on ", f.WebSocketPort)
 		err = http.ListenAndServe(f.WebSocketPort, nil)
 	}
 	if err != nil {
-		panic("ListenAndServe: " + err.Error())
+		log.Fatal("ListenAndServe: " + err.Error())
 	}
 }
