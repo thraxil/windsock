@@ -1,0 +1,18 @@
+hash: 0dc0b4b5bdbb28dacab22460823be6a6ae5ff397095e9ead61c6d4c0ad258ee6
+updated: 2016-12-15T19:37:03.505526281Z
+imports:
+- name: github.com/kelseyhightower/envconfig
+  version: 9aca109c9aec4633fced9717c4a09ecab3d33111
+- name: github.com/pebbe/zmq2
+  version: ef6eba09b18767e7d794d151d3e5f5a4c89f1fb1
+- name: github.com/Sirupsen/logrus
+  version: d26492970760ca5d33129d2d799e34be5c4782eb
+- name: golang.org/x/net
+  version: 989b0d93bc6ec51a61396cea995cf81d807fd342
+  subpackages:
+  - websocket
+- name: golang.org/x/sys
+  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
+  subpackages:
+  - unix
+testImports: []
