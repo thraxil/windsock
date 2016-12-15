@@ -1,8 +1,12 @@
-FROM golang
-RUN apt-get update
-RUN apt-get install pkg-config libzmq-dev -y
-RUN go get github.com/pebbe/zmq2
-RUN go get golang.org/x/net/websocket
+FROM golang:1.7
+RUN apt-get update \
+    && apt-get install pkg-config libzmq-dev -y \
+    && go get github.com/pebbe/zmq2 \
+    && go get golang.org/x/net/websocket \
+    && go get -u github.com/Sirupsen/logrus \
+    && go get -u github.com/kelseyhightower/envconfig \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 ADD . /go/src/github.com/thraxil/windsock
 WORKDIR /go/src/github.com/thraxil/windsock
 RUN go build windsock.go
