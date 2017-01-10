@@ -5,7 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
-	_ "expvar"
+	"expvar"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -26,6 +26,19 @@ var SECRET = "6f1d916c-7761-4874-8d5b-8f8f93d20bf2"
 
 var AUTH_WINDOW = 60 * time.Second
 
+var startTime = time.Now().UTC()
+
+// metrics
+
+// messages from the broker
+var numMessages = expvar.NewInt("NumZMQMessages")
+
+// currently connected clients
+var numClients = expvar.NewInt("NumClients")
+
+// total clients that have been seen
+var totalClients = expvar.NewInt("TotalClients")
+
 // bundle a list of online users along with
 // in and out channels
 type room struct {
@@ -38,6 +51,11 @@ type room struct {
 type envelope struct {
 	Address string `json:"address"`
 	Content string `json:"content"`
+}
+
+func uptime() interface{} {
+	uptime := time.Since(startTime)
+	return int64(uptime)
 }
 
 func startswith(s, prefix string) bool {
@@ -213,9 +231,12 @@ func BuildConnection(ws *websocket.Conn) {
 		Send:       make(chan envelope, 256),
 	}
 	runningRoom.Users[onlineUser] = true
+	numClients.Add(1)
+	totalClients.Add(1)
 	go onlineUser.PushToClient()
 	onlineUser.PullFromClient()
 	delete(runningRoom.Users, onlineUser)
+	numClients.Add(-1)
 	log.Info("tore down user connection")
 }
 
@@ -230,6 +251,7 @@ func zmqToWebsocket(subsocket zmq.Socket) {
 			"content": string(content),
 		}).Info("received a zmq message")
 		runningRoom.SendMessage(envelope{string(address), string(content)})
+		numMessages.Add(1)
 	}
 }
 
@@ -318,6 +340,7 @@ func main() {
 
 	http.Handle("/socket/", websocket.Handler(BuildConnection))
 
+	expvar.Publish("Uptime", expvar.Func(uptime))
 	if f.Certificate != "" && f.Key != "" {
 		// configured for SSL
 		log.Info("starting WSS on ", f.WebSocketPort)

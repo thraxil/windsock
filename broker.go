@@ -32,7 +32,7 @@ type config struct {
 }
 
 var startTime = time.Now().UTC()
-var numMessages = expvar.NewInt("num_messages")
+var numMessages = expvar.NewInt("NumMessages")
 
 func uptime() interface{} {
 	uptime := time.Since(startTime)
