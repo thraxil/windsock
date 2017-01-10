@@ -26,6 +26,10 @@ Pub/Sub ports, and you will want to make a new "Secret" for windsock
 and your client application to share. If you're using SSL, point the
 Certificate and Key fields at your `.pem` and `.key` files.
 
+These are both available on the public Docker Hub:
+[thraxil/windsock](https://hub.docker.com/r/thraxil/windsock/)
+and [thraxil/windsock-broker](https://hub.docker.com/r/thraxil/windsock-broker/)
+
 The 'generate_cert.go` program is included to help you make a
 self-signed certificate (for testing). It's just copied from the Go
 standard library
@@ -47,7 +51,7 @@ If you're using go version 1.4.2 with windsock, you might get this
 "invalid heap pointer" error: https://github.com/pebbe/zmq2/issues/3
 
 There are a few workarounds for this:
-   * Use go version 1.3.x
+   * Use a different Go version.
    * **Or**, use libzmq version 4, with https://github.com/pebbe/zmq4.
      In order to do this, you need to install the `libzmq3-dev`
      (sic) package in ubuntu, and switch `pebbe/zmq2` to `pebbe/zmq4`
