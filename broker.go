@@ -5,8 +5,11 @@ package main
 
 import (
 	"encoding/json"
+	"expvar"
 	"flag"
 	"io/ioutil"
+	"net/http"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/kelseyhightower/envconfig"
@@ -24,7 +27,16 @@ type ConfigData struct {
 }
 
 type config struct {
-	LogLevel string `envconfig:"LOG_LEVEL"`
+	LogLevel   string `envconfig:"LOG_LEVEL"`
+	ExpVarPort string `envconfig:"EXPVAR_PORT" default:"8081"`
+}
+
+var startTime = time.Now().UTC()
+var numMessages = expvar.NewInt("num_messages")
+
+func uptime() interface{} {
+	uptime := time.Since(startTime)
+	return int64(uptime)
 }
 
 func main() {
@@ -72,6 +84,10 @@ func main() {
 
 	log.Info("listening on ZMQ sockets")
 
+	expvar.Publish("Uptime", expvar.Func(uptime))
+	go http.ListenAndServe(":"+c.ExpVarPort, nil)
+	log.Info("expvar available on :" + c.ExpVarPort + "/debug/vars")
+
 	var e envelope
 	for {
 		msg, _ := repsocket.Recv(0)
@@ -80,5 +96,6 @@ func main() {
 		pubsocket.Send(e.Content, 0)
 		repsocket.Send("published", 0)
 		log.Debug("published message")
+		numMessages.Add(1)
 	}
 }

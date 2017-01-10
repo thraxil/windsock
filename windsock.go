@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
+	_ "expvar"
 	"flag"
 	"fmt"
 	"io/ioutil"
