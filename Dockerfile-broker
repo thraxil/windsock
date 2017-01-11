@@ -6,5 +6,6 @@ RUN apt-get update \
 ADD . /go/src/github.com/thraxil/windsock
 WORKDIR /go/src/github.com/thraxil/windsock
 RUN go build windsock.go
-EXPOSE 5555 5556
+ENV BROKER_EXPVAR_PORT 8081
+EXPOSE 5555 5556 8081
 CMD ["/go/src/github.com/thraxil/windsock/broker", "-config=/go/src/github.com/thraxil/windsock/broker.json"]
